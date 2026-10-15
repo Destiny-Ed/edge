@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'providers/app_settings.dart';
 import 'providers/picks_provider.dart';
 import 'screens/main_shell.dart';
+import 'services/notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -13,8 +14,15 @@ void main() async {
     statusBarIconBrightness: Brightness.light,
   ));
 
+  await NotificationService.init();
+
   final settings = AppSettings();
   await settings.load();
+
+  // Re-apply schedule if user already enabled it
+  if (settings.dailyNotifications) {
+    await NotificationService.scheduleDaily7Am();
+  }
 
   final picks = PicksProvider();
   await picks.load();
@@ -80,6 +88,13 @@ class EdgeApp extends StatelessWidget {
         unselectedItemColor: isDark ? Colors.white54 : Colors.black54,
         type: BottomNavigationBarType.fixed,
         elevation: 8,
+      ),
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: isDark ? const Color(0xFF1A1D23) : Colors.white,
+        modalBackgroundColor: isDark ? const Color(0xFF1A1D23) : Colors.white,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
       ),
       useMaterial3: true,
     );

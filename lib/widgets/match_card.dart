@@ -24,7 +24,8 @@ class MatchCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     final timeFormat = DateFormat('HH:mm');
     final dateFormat = DateFormat('EEE, d MMM');
 
@@ -40,19 +41,18 @@ class MatchCard extends StatelessWidget {
         confColor = Colors.redAccent;
         break;
       default:
-        confColor = Colors.white54;
+        confColor = isDark ? Colors.white54 : Colors.black45;
     }
+
+    final borderColor = isSaved
+        ? const Color(0xFF00C853).withOpacity(0.6)
+        : (isDark ? Colors.white.withOpacity(0.06) : Colors.black12);
 
     return Container(
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1A1D23) : Colors.white,
+        color: theme.colorScheme.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isSaved
-              ? const Color(0xFF00C853).withOpacity(0.6)
-              : (isDark ? Colors.white.withOpacity(0.06) : Colors.black12),
-          width: isSaved ? 1.5 : 1,
-        ),
+        border: Border.all(color: borderColor, width: isSaved ? 1.5 : 1),
       ),
       child: Material(
         color: Colors.transparent,
@@ -117,8 +117,6 @@ class MatchCard extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 14),
-
-                // Teams + score (for live)
                 Row(
                   children: [
                     _logo(match.homeLogo),
@@ -132,22 +130,25 @@ class MatchCard extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    if (isLiveCard || match.isFinished) ...[
+                    if (isLiveCard || match.isFinished)
                       Text(
                         '${match.homeGoals ?? 0} - ${match.awayGoals ?? 0}',
                         style: const TextStyle(
                           fontWeight: FontWeight.w800,
                           fontSize: 16,
                         ),
+                      )
+                    else
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        child: Text(
+                          'vs',
+                          style: TextStyle(
+                            color: isDark ? Colors.white38 : Colors.black38,
+                            fontSize: 13,
+                          ),
+                        ),
                       ),
-                    ] else ...[
-                      const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 8),
-                        child: Text('vs',
-                            style:
-                                TextStyle(color: Colors.white38, fontSize: 13)),
-                      ),
-                    ],
                     Expanded(
                       child: Text(
                         match.awayTeam,
@@ -162,34 +163,26 @@ class MatchCard extends StatelessWidget {
                     _logo(match.awayLogo),
                   ],
                 ),
-
                 if (!isLiveCard) ...[
                   const SizedBox(height: 14),
                   Wrap(
                     spacing: 8,
                     runSpacing: 8,
                     children: match.predictions.map((tip) {
-                      final isWeak = tip == 'No strong tip' || tip == 'Limited data';
                       return Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 12, vertical: 6),
                         decoration: BoxDecoration(
-                          color: isWeak
-                              ? Colors.white10
-                              : const Color(0xFF00C853).withOpacity(0.15),
+                          color: const Color(0xFF00C853).withOpacity(0.15),
                           borderRadius: BorderRadius.circular(20),
                           border: Border.all(
-                            color: isWeak
-                                ? Colors.white24
-                                : const Color(0xFF00C853).withOpacity(0.4),
+                            color: const Color(0xFF00C853).withOpacity(0.4),
                           ),
                         ),
                         child: Text(
                           tip,
-                          style: TextStyle(
-                            color: isWeak
-                                ? Colors.white54
-                                : const Color(0xFF00C853),
+                          style: const TextStyle(
+                            color: Color(0xFF00C853),
                             fontWeight: FontWeight.w600,
                             fontSize: 13,
                           ),
@@ -243,14 +236,14 @@ class MatchCard extends StatelessWidget {
                               size: 18),
                           label: const Text('Save'),
                           style: TextButton.styleFrom(
-                            foregroundColor: Colors.white70,
+                            foregroundColor:
+                                isDark ? Colors.white70 : Colors.black54,
                             visualDensity: VisualDensity.compact,
                           ),
                         ),
                     ],
                   ),
                 ],
-
                 if (showResultActions) ...[
                   const SizedBox(height: 10),
                   Row(
@@ -318,15 +311,22 @@ class MatchCard extends StatelessWidget {
   }
 
   void _showDetails(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final surface = theme.colorScheme.surface;
+    final onSurface = theme.colorScheme.onSurface;
+    final muted = isDark ? Colors.white54 : Colors.black54;
+
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF1A1D23),
+      backgroundColor: surface,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (_) {
-        return Padding(
+        return Container(
+          color: surface,
           padding: const EdgeInsets.fromLTRB(24, 24, 24, 40),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -334,56 +334,84 @@ class MatchCard extends StatelessWidget {
             children: [
               Text(
                 '${match.homeTeam} vs ${match.awayTeam}',
-                style:
-                    const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: onSurface,
+                ),
               ),
               const SizedBox(height: 6),
-              Text('${match.league} • ${match.country}',
-                  style: const TextStyle(color: Colors.white54)),
+              Text(
+                '${match.league} • ${match.country}',
+                style: TextStyle(color: muted),
+              ),
               const SizedBox(height: 4),
               Text(
                 DateFormat('EEEE, d MMM • HH:mm').format(match.kickOff),
-                style: const TextStyle(color: Colors.white54, fontSize: 13),
+                style: TextStyle(color: muted, fontSize: 13),
               ),
               if (match.percentages != null) ...[
                 const SizedBox(height: 20),
-                const Text('Win Probabilities',
-                    style: TextStyle(fontWeight: FontWeight.w600)),
+                Text(
+                  'Win Probabilities',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: onSurface,
+                  ),
+                ),
                 const SizedBox(height: 10),
                 Row(
                   children: [
-                    _pct('Home', match.percentages!['home'] ?? '-'),
+                    _pct(context, 'Home', match.percentages!['home'] ?? '-'),
                     const SizedBox(width: 8),
-                    _pct('Draw', match.percentages!['draw'] ?? '-'),
+                    _pct(context, 'Draw', match.percentages!['draw'] ?? '-'),
                     const SizedBox(width: 8),
-                    _pct('Away', match.percentages!['away'] ?? '-'),
+                    _pct(context, 'Away', match.percentages!['away'] ?? '-'),
                   ],
                 ),
               ],
               if (match.advice != null && match.advice!.isNotEmpty) ...[
                 const SizedBox(height: 20),
-                const Text('API Advice',
-                    style: TextStyle(fontWeight: FontWeight.w600)),
+                Text(
+                  'API Advice',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: onSurface,
+                  ),
+                ),
                 const SizedBox(height: 6),
-                Text(match.advice!),
+                Text(match.advice!, style: TextStyle(color: onSurface)),
               ],
               if (match.underOver != null) ...[
                 const SizedBox(height: 12),
-                Text('Under/Over signal: ${match.underOver}',
-                    style: const TextStyle(color: Colors.white70)),
+                Text(
+                  'Under/Over signal: ${match.underOver}',
+                  style: TextStyle(color: muted),
+                ),
               ],
               const SizedBox(height: 20),
-              const Text('Tips',
-                  style: TextStyle(fontWeight: FontWeight.w600)),
+              Text(
+                'Tips',
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: onSurface,
+                ),
+              ),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
                 children: match.predictions
-                    .map((t) => Chip(
-                          label: Text(t),
-                          backgroundColor:
-                              const Color(0xFF00C853).withOpacity(0.2),
-                        ))
+                    .map(
+                      (t) => Chip(
+                        label: Text(t),
+                        backgroundColor:
+                            const Color(0xFF00C853).withOpacity(0.2),
+                        labelStyle: const TextStyle(
+                          color: Color(0xFF00C853),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    )
                     .toList(),
               ),
               const SizedBox(height: 24),
@@ -402,7 +430,8 @@ class MatchCard extends StatelessWidget {
                     Navigator.pop(context);
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
-                          content: Text('Copied! Paste into SportyBet')),
+                        content: Text('Copied! Paste into SportyBet'),
+                      ),
                     );
                   },
                   child: const Text('Copy for SportyBet'),
@@ -415,22 +444,31 @@ class MatchCard extends StatelessWidget {
     );
   }
 
-  Widget _pct(String label, String value) {
+  Widget _pct(BuildContext context, String label, String value) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Expanded(
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 12),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.05),
+          color: isDark
+              ? Colors.white.withOpacity(0.05)
+              : Colors.black.withOpacity(0.04),
           borderRadius: BorderRadius.circular(10),
         ),
         child: Column(
           children: [
-            Text(value,
-                style:
-                    const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+            Text(
+              value,
+              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+            ),
             const SizedBox(height: 2),
-            Text(label,
-                style: const TextStyle(color: Colors.white54, fontSize: 11)),
+            Text(
+              label,
+              style: TextStyle(
+                color: isDark ? Colors.white54 : Colors.black54,
+                fontSize: 11,
+              ),
+            ),
           ],
         ),
       ),

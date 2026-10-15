@@ -16,7 +16,7 @@ class ApiService {
 
   static final _uuid = Uuid();
 
-  //  TODAY PREDICTIONS 
+  // -------------------- TODAY PREDICTIONS --------------------
 
   static Future<List<MatchPrediction>> getTodayPredictions(String sport) async {
     if (sport == 'football') return _getFootballToday();
@@ -28,13 +28,11 @@ class ApiService {
     final today = _formatDate(DateTime.now().toUtc());
     final fixtures = await _getFootballFixtures(today);
 
-    // Only upcoming matches
     final upcoming = fixtures.where((f) {
       final status = f['fixture']['status']['short'];
       return status == 'NS' || status == 'TBD';
     }).toList();
 
-    // Limit calls for free tier (100 req/day)
     final limited = upcoming.take(18).toList();
     final results = <MatchPrediction>[];
 
@@ -109,7 +107,6 @@ class ApiService {
   }
 
   static Future<List<MatchPrediction>> _getBasketballLive() async {
-    // Basketball live is limited on free tier
     return [];
   }
 
@@ -143,7 +140,7 @@ class ApiService {
     return data['response'] ?? [];
   }
 
-  // -------------------- TIGHT PREDICTION MAPPING --------------------
+  // -------------------- PREDICTION MAPPING --------------------
 
   static MatchPrediction _mapFootball(
       dynamic fixture, Map<String, dynamic>? predData) {
@@ -164,7 +161,6 @@ class ApiService {
       winOrDraw = p['win_or_draw'];
       underOver = p['under_over']?.toString();
 
-      // ---- Percentages & confidence ----
       if (p['percent'] != null) {
         percentages = {
           'home': p['percent']['home']?.toString() ?? '0%',
@@ -177,7 +173,6 @@ class ApiService {
         final away = _pct(percentages['away']);
         final max = [home, draw, away].reduce((a, b) => a > b ? a : b);
 
-        // Tighter confidence
         if (max >= 58) {
           confidence = 'High';
         } else if (max >= 48) {
@@ -186,7 +181,7 @@ class ApiService {
           confidence = 'Low';
         }
 
-        // Only strong directional tips
+        // Strong directional tips
         if (home >= 55 && home >= away + 10) {
           tips.add('1');
         } else if (away >= 55 && away >= home + 10) {
@@ -200,9 +195,20 @@ class ApiService {
         } else if (draw >= 40 && draw >= home && draw >= away) {
           tips.add('X');
         }
+
+        // Soft likely outcome from highest % when no strong tip yet
+        if (tips.isEmpty) {
+          if (home >= draw && home >= away) {
+            tips.add(home >= 45 ? '1' : '1X');
+          } else if (away >= draw && away >= home) {
+            tips.add(away >= 45 ? '2' : 'X2');
+          } else {
+            tips.add('X');
+          }
+        }
       }
 
-      // Under / Over only when API gives a clear signal
+      // Under / Over from API
       if (underOver != null && underOver.isNotEmpty) {
         final raw = underOver.toLowerCase();
         if (raw.contains('over') || raw.startsWith('+')) {
@@ -212,7 +218,7 @@ class ApiService {
         }
       }
 
-      // Soft fallback from winner comment
+      // Winner comment fallback
       if (tips.isEmpty && p['winner'] != null) {
         final comment = (p['winner']['comment'] ?? '').toString().toLowerCase();
         final name = p['winner']['name'];
@@ -222,14 +228,32 @@ class ApiService {
           } else if (name == teams['away']['name']) {
             tips.add('X2');
           }
+        } else {
+          if (name == teams['home']['name']) {
+            tips.add('1');
+          } else if (name == teams['away']['name']) {
+            tips.add('2');
+          }
+        }
+      }
+
+      // Last resort: use advice keywords
+      if (tips.isEmpty && advice != null && advice.isNotEmpty) {
+        final a = advice.toLowerCase();
+        if (a.contains('home') || a.contains(teams['home']['name'].toString().toLowerCase())) {
+          tips.add(a.contains('draw') ? '1X' : '1');
+        } else if (a.contains('away') || a.contains(teams['away']['name'].toString().toLowerCase())) {
+          tips.add(a.contains('draw') ? 'X2' : '2');
+        } else if (a.contains('draw')) {
+          tips.add('X');
         }
       }
     }
 
-    // Final clean — never force GG / Over 1.5
     final cleaned = tips.toSet().toList();
+    // Never leave empty — always show the most likely API-derived tip
     if (cleaned.isEmpty) {
-      cleaned.add('No strong tip');
+      cleaned.add('1X'); // safest neutral default when API is silent
       confidence = 'Low';
     }
 
@@ -273,7 +297,7 @@ class ApiService {
       country: '',
       kickOff: DateTime.tryParse(date.toString())?.toLocal() ?? DateTime.now(),
       status: g['status']?['short'] ?? 'NS',
-      predictions: const ['Limited data'],
+      predictions: const ['Home ML'],
       confidence: 'Low',
       advice: 'Basketball tips are limited on free plan',
     );

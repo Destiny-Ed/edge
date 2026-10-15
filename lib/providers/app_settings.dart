@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../services/notification_service.dart';
 
 class AppSettings extends ChangeNotifier {
   bool isDark = true;
@@ -23,7 +24,13 @@ class AppSettings extends ChangeNotifier {
     dailyNotifications = value;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('dailyNotifications', value);
+
+    if (value) {
+      await NotificationService.scheduleDaily7Am();
+    } else {
+      await NotificationService.cancelDaily();
+    }
+
     notifyListeners();
-    // Note: Actual local notification scheduling can be added later with flutter_local_notifications
   }
 }

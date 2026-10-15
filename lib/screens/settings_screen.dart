@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/app_settings.dart';
+import '../services/notification_service.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -31,24 +32,30 @@ class SettingsScreen extends StatelessWidget {
           SwitchListTile(
             title: const Text('Daily Predictions'),
             subtitle: const Text(
-                'Remind me every morning when new tips are ready'),
+              'Get a reminder every morning at 7:00 AM',
+            ),
             value: settings.dailyNotifications,
             activeColor: const Color(0xFF00C853),
             onChanged: (v) => settings.setDailyNotifications(v),
           ),
-          const SizedBox(height: 8),
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16),
-            child: Text(
-              'Note: Full local notification scheduling can be added later with flutter_local_notifications.',
-              style: TextStyle(color: Colors.white38, fontSize: 12),
-            ),
+          ListTile(
+            title: const Text('Test notification'),
+            subtitle: const Text('Send a test notification now'),
+            trailing: const Icon(Icons.notifications_active_outlined),
+            onTap: () async {
+              await NotificationService.showTest();
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Test notification sent')),
+                );
+              }
+            },
           ),
           const Divider(height: 32),
           _sectionTitle('About'),
           const ListTile(
             title: Text('Edge'),
-            subtitle: Text('Smart picks. Clear edge.\nVersion 1.2.0'),
+            subtitle: Text('Smart picks. Clear edge.\nVersion 1.2.1'),
           ),
           const ListTile(
             title: Text('Data Source'),
