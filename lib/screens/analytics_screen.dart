@@ -1,98 +1,81 @@
 import 'package:flutter/material.dart';
-import '../services/storage_service.dart';
+import 'package:provider/provider.dart';
+import '../providers/picks_provider.dart';
 
-class AnalyticsScreen extends StatefulWidget {
+class AnalyticsScreen extends StatelessWidget {
   const AnalyticsScreen({super.key});
 
   @override
-  State<AnalyticsScreen> createState() => _AnalyticsScreenState();
-}
-
-class _AnalyticsScreenState extends State<AnalyticsScreen> {
-  Map<String, dynamic>? _data;
-  bool _loading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    final data = await StorageService.getAnalytics();
-    setState(() {
-      _data = data;
-      _loading = false;
-    });
-  }
-
-  @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Analytics')),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _data == null || (_data!['total'] as int) == 0
-              ? const Center(
-                  child: Text(
-                    'No settled picks yet.\nMark some picks as Won/Lost to see analytics.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.white54),
-                  ),
-                )
-              : ListView(
-                  padding: const EdgeInsets.all(20),
+    final data = context.watch<PicksProvider>().getAnalytics();
+    final total = data['total'] as int;
+
+    return SafeArea(
+      child: total == 0
+          ? const Center(
+              child: Text(
+                'No settled picks yet.\nMark picks as Won/Lost to see analytics.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white54),
+              ),
+            )
+          : ListView(
+              padding: const EdgeInsets.all(20),
+              children: [
+                const Text(
+                  'Analytics',
+                  style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 20),
+                Row(
                   children: [
-                    // Overview cards
-                    Row(
-                      children: [
-                        _statCard('Total', '${_data!['total']}', Colors.white70),
-                        const SizedBox(width: 12),
-                        _statCard('Won', '${_data!['won']}', const Color(0xFF00C853)),
-                        const SizedBox(width: 12),
-                        _statCard('Lost', '${_data!['lost']}', Colors.redAccent),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        _statCard(
-                          'Accuracy',
-                          '${(_data!['accuracy'] as double).toStringAsFixed(1)}%',
-                          const Color(0xFF00C853),
-                        ),
-                        const SizedBox(width: 12),
-                        _statCard(
-                          'Best Streak',
-                          '${_data!['bestStreak']}',
-                          Colors.orangeAccent,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 28),
-                    const Text('By Market',
-                        style: TextStyle(
-                            fontSize: 16, fontWeight: FontWeight.w700)),
-                    const SizedBox(height: 12),
-                    ..._buildBreakdown(_data!['byMarket']),
-                    const SizedBox(height: 24),
-                    const Text('By Confidence',
-                        style: TextStyle(
-                            fontSize: 16, fontWeight: FontWeight.w700)),
-                    const SizedBox(height: 12),
-                    ..._buildBreakdown(_data!['byConfidence']),
-                    const SizedBox(height: 24),
-                    const Text('By League',
-                        style: TextStyle(
-                            fontSize: 16, fontWeight: FontWeight.w700)),
-                    const SizedBox(height: 12),
-                    ..._buildBreakdown(_data!['byLeague']),
+                    _card('Total', '${data['total']}', Colors.white70),
+                    const SizedBox(width: 10),
+                    _card('Won', '${data['won']}', const Color(0xFF00C853)),
+                    const SizedBox(width: 10),
+                    _card('Lost', '${data['lost']}', Colors.redAccent),
                   ],
                 ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    _card(
+                      'Accuracy',
+                      '${(data['accuracy'] as double).toStringAsFixed(1)}%',
+                      const Color(0xFF00C853),
+                    ),
+                    const SizedBox(width: 10),
+                    _card(
+                      'Best Streak',
+                      '${data['bestStreak']}',
+                      Colors.orangeAccent,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 28),
+                const Text('By Market',
+                    style:
+                        TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 12),
+                ..._breakdown(data['byMarket']),
+                const SizedBox(height: 24),
+                const Text('By Confidence',
+                    style:
+                        TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 12),
+                ..._breakdown(data['byConfidence']),
+                const SizedBox(height: 24),
+                const Text('By League',
+                    style:
+                        TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 12),
+                ..._breakdown(data['byLeague']),
+              ],
+            ),
     );
   }
 
-  Widget _statCard(String label, String value, Color color) {
+  Widget _card(String label, String value, Color color) {
     return Expanded(
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 16),
@@ -104,9 +87,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
           children: [
             Text(value,
                 style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w800,
-                    color: color)),
+                    fontSize: 20, fontWeight: FontWeight.w800, color: color)),
             const SizedBox(height: 4),
             Text(label,
                 style: const TextStyle(color: Colors.white54, fontSize: 12)),
@@ -116,18 +97,16 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     );
   }
 
-  List<Widget> _buildBreakdown(Map<String, dynamic> map) {
+  List<Widget> _breakdown(Map<String, dynamic> map) {
     if (map.isEmpty) {
-      return [
-        const Text('No data', style: TextStyle(color: Colors.white38))
-      ];
+      return [const Text('No data', style: TextStyle(color: Colors.white38))];
     }
 
     final entries = map.entries.toList()
       ..sort((a, b) {
-        final aTotal = (a.value['won'] ?? 0) + (a.value['lost'] ?? 0);
-        final bTotal = (b.value['won'] ?? 0) + (b.value['lost'] ?? 0);
-        return bTotal.compareTo(aTotal);
+        final at = (a.value['won'] ?? 0) + (a.value['lost'] ?? 0);
+        final bt = (b.value['won'] ?? 0) + (b.value['lost'] ?? 0);
+        return bt.compareTo(at);
       });
 
     return entries.map((e) {

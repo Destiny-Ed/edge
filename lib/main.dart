@@ -1,15 +1,33 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'screens/home_screen.dart';
+import 'package:provider/provider.dart';
+import 'providers/app_settings.dart';
+import 'providers/picks_provider.dart';
+import 'screens/main_shell.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
     statusBarColor: Colors.transparent,
     statusBarIconBrightness: Brightness.light,
   ));
-  runApp(const EdgeApp());
+
+  final settings = AppSettings();
+  await settings.load();
+
+  final picks = PicksProvider();
+  await picks.load();
+
+  runApp(
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider.value(value: settings),
+        ChangeNotifierProvider.value(value: picks),
+      ],
+      child: const EdgeApp(),
+    ),
+  );
 }
 
 class EdgeApp extends StatelessWidget {
@@ -17,27 +35,53 @@ class EdgeApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final settings = context.watch<AppSettings>();
+
     return MaterialApp(
       title: 'Edge',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        brightness: Brightness.dark,
-        scaffoldBackgroundColor: const Color(0xFF0F1115),
-        primaryColor: const Color(0xFF00C853),
-        colorScheme: const ColorScheme.dark(
-          primary: Color(0xFF00C853),
-          secondary: Color(0xFF2979FF),
-          surface: Color(0xFF1A1D23),
-        ),
-        textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme),
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFF0F1115),
-          elevation: 0,
-          centerTitle: true,
-        ),
-        useMaterial3: true,
+      themeMode: settings.isDark ? ThemeMode.dark : ThemeMode.light,
+      theme: _buildTheme(Brightness.light),
+      darkTheme: _buildTheme(Brightness.dark),
+      home: const MainShell(),
+    );
+  }
+
+  ThemeData _buildTheme(Brightness brightness) {
+    final isDark = brightness == Brightness.dark;
+    return ThemeData(
+      brightness: brightness,
+      scaffoldBackgroundColor:
+          isDark ? const Color(0xFF0F1115) : const Color(0xFFF5F6F8),
+      primaryColor: const Color(0xFF00C853),
+      colorScheme: ColorScheme(
+        brightness: brightness,
+        primary: const Color(0xFF00C853),
+        onPrimary: Colors.black,
+        secondary: const Color(0xFF2979FF),
+        onSecondary: Colors.white,
+        error: Colors.redAccent,
+        onError: Colors.white,
+        surface: isDark ? const Color(0xFF1A1D23) : Colors.white,
+        onSurface: isDark ? Colors.white : Colors.black87,
       ),
-      home: const HomeScreen(),
+      textTheme: GoogleFonts.interTextTheme(
+        isDark ? ThemeData.dark().textTheme : ThemeData.light().textTheme,
+      ),
+      appBarTheme: AppBarTheme(
+        backgroundColor: isDark ? const Color(0xFF0F1115) : Colors.white,
+        elevation: 0,
+        centerTitle: true,
+        foregroundColor: isDark ? Colors.white : Colors.black87,
+      ),
+      bottomNavigationBarTheme: BottomNavigationBarThemeData(
+        backgroundColor: isDark ? const Color(0xFF14161A) : Colors.white,
+        selectedItemColor: const Color(0xFF00C853),
+        unselectedItemColor: isDark ? Colors.white54 : Colors.black54,
+        type: BottomNavigationBarType.fixed,
+        elevation: 8,
+      ),
+      useMaterial3: true,
     );
   }
 }

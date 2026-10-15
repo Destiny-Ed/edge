@@ -2,40 +2,27 @@
 
 **Smart picks. Clear edge.**
 
-A comprehensive Flutter sports prediction app focused on helping you find value and track your performance.
+## What's new in v1.2
 
-## Features
+- **Today only** predictions (This Week removed)
+- **Bottom navigation**: Today • Live • My Picks • Stats • Settings
+- **Saved picks are highlighted** so you don't save the same game twice
+- **Tighter prediction logic** — no more forced 1X / Over 1.5 / GG on every match
+- **Live scores** tab
+- **Dropdown filters** (League, Confidence, Market)
+- **Settings**: Dark/Light theme + Daily notification toggle
+- Richer match details (probabilities, advice, under/over signal)
 
-- **Today & This Week** predictions
-- **Improved prediction logic** (no more forced 1X + Over 1.5 + GG on every match)
-- **Save picks** and mark them as **Won / Lost / Void**
-- **Analytics dashboard** — accuracy by market, by league, by confidence, streaks
-- **Filters** — League, Confidence level, Market type
-- Multi-sport support (Football fully supported, Basketball basic)
-- Long-press or button to copy tips for SportyBet
-- Clean dark UI
+## Setup
 
-## Prediction Quality Note
+1. Get API key → [dashboard.api-football.com](https://dashboard.api-football.com)
+2. Put it in `lib/services/api_service.dart`
+3. `flutter pub get && flutter run`
 
-Predictions now come primarily from API-Sports' own statistical model (`/predictions` endpoint).  
-We only surface tips when the data is reasonably strong.  
-Low-confidence or unclear matches are marked accordingly instead of forcing popular markets.
+## Prediction philosophy
 
-## Getting Started
-
-1. Get a free API key → [dashboard.api-football.com](https://dashboard.api-football.com)
-2. Open `lib/services/api_service.dart` and replace `YOUR_API_KEY_HERE`
-3. Run:
-
-```bash
-flutter pub get
-flutter run
-```
-
-## Free Tier Warning
-
-API-Sports free plan = 100 requests/day.  
-The app limits the number of fixtures + prediction calls to stay within reasonable usage.
+Tips are only shown when the underlying probabilities are reasonably strong.  
+Weak matches are labelled "No strong tip" instead of inventing popular markets.
 
 ---
 

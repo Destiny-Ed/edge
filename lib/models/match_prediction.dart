@@ -1,9 +1,9 @@
 enum PickResult { pending, won, lost, voided }
 
 class MatchPrediction {
-  final String id; // unique local id
+  final String id;
   final int fixtureId;
-  final String sport; // football, basketball, etc
+  final String sport;
   final String homeTeam;
   final String awayTeam;
   final String? homeLogo;
@@ -12,12 +12,15 @@ class MatchPrediction {
   final String country;
   final DateTime kickOff;
   final String status;
-  final List<String> predictions; // clean tips only
+  final List<String> predictions;
   final String? advice;
-  final String confidence; // High / Medium / Low / Unknown
+  final String confidence;
   final Map<String, String>? percentages;
   final String? underOver;
   final bool? winOrDraw;
+  final int? homeGoals;
+  final int? awayGoals;
+  final String? elapsed;
   PickResult result;
   DateTime? settledAt;
 
@@ -39,14 +42,33 @@ class MatchPrediction {
     this.percentages,
     this.underOver,
     this.winOrDraw,
+    this.homeGoals,
+    this.awayGoals,
+    this.elapsed,
     this.result = PickResult.pending,
     this.settledAt,
   });
+
+  bool get isLive =>
+      status == '1H' ||
+      status == '2H' ||
+      status == 'HT' ||
+      status == 'ET' ||
+      status == 'BT' ||
+      status == 'P' ||
+      status == 'LIVE';
+
+  bool get isFinished =>
+      status == 'FT' || status == 'AET' || status == 'PEN';
 
   MatchPrediction copyWith({
     PickResult? result,
     DateTime? settledAt,
     List<String>? predictions,
+    int? homeGoals,
+    int? awayGoals,
+    String? status,
+    String? elapsed,
   }) {
     return MatchPrediction(
       id: id,
@@ -59,13 +81,16 @@ class MatchPrediction {
       league: league,
       country: country,
       kickOff: kickOff,
-      status: status,
+      status: status ?? this.status,
       predictions: predictions ?? this.predictions,
       advice: advice,
       confidence: confidence,
       percentages: percentages,
       underOver: underOver,
       winOrDraw: winOrDraw,
+      homeGoals: homeGoals ?? this.homeGoals,
+      awayGoals: awayGoals ?? this.awayGoals,
+      elapsed: elapsed ?? this.elapsed,
       result: result ?? this.result,
       settledAt: settledAt ?? this.settledAt,
     );
@@ -89,6 +114,9 @@ class MatchPrediction {
         'percentages': percentages,
         'underOver': underOver,
         'winOrDraw': winOrDraw,
+        'homeGoals': homeGoals,
+        'awayGoals': awayGoals,
+        'elapsed': elapsed,
         'result': result.name,
         'settledAt': settledAt?.toIso8601String(),
       };
@@ -114,6 +142,9 @@ class MatchPrediction {
           : null,
       underOver: json['underOver'],
       winOrDraw: json['winOrDraw'],
+      homeGoals: json['homeGoals'],
+      awayGoals: json['awayGoals'],
+      elapsed: json['elapsed'],
       result: PickResult.values.firstWhere(
         (e) => e.name == json['result'],
         orElse: () => PickResult.pending,

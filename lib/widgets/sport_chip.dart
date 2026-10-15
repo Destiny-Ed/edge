@@ -14,22 +14,30 @@ class SportChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFF00C853) : const Color(0xFF1A1D23),
+          color: isSelected
+              ? const Color(0xFF00C853)
+              : (isDark ? const Color(0xFF1A1D23) : Colors.white),
           borderRadius: BorderRadius.circular(24),
           border: Border.all(
-            color: isSelected ? const Color(0xFF00C853) : Colors.white12,
+            color: isSelected
+                ? const Color(0xFF00C853)
+                : (isDark ? Colors.white12 : Colors.black12),
           ),
         ),
         child: Text(
           label,
           style: TextStyle(
-            color: isSelected ? Colors.black : Colors.white70,
+            color: isSelected
+                ? Colors.black
+                : (isDark ? Colors.white70 : Colors.black87),
             fontWeight: FontWeight.w600,
             fontSize: 13,
           ),
