@@ -10,10 +10,13 @@ class ApiService {
   static const String _footballBase = 'https://v3.football.api-sports.io';
   static const String _basketballBase = 'https://v1.basketball.api-sports.io';
 
-  static Map<String, String> get _headers => {'x-apisports-key': _apiKey};
+  static Map<String, String> get _headers => {
+        'x-apisports-key': _apiKey,
+      };
+
   static final _uuid = Uuid();
 
-  // -------------------- TODAY PREDICTIONS --------------------
+  //  TODAY PREDICTIONS 
 
   static Future<List<MatchPrediction>> getTodayPredictions(String sport) async {
     if (sport == 'football') return _getFootballToday();
@@ -25,12 +28,13 @@ class ApiService {
     final today = _formatDate(DateTime.now().toUtc());
     final fixtures = await _getFootballFixtures(today);
 
+    // Only upcoming matches
     final upcoming = fixtures.where((f) {
       final status = f['fixture']['status']['short'];
       return status == 'NS' || status == 'TBD';
     }).toList();
 
-    // Keep request count reasonable for free tier
+    // Limit calls for free tier (100 req/day)
     final limited = upcoming.take(18).toList();
     final results = <MatchPrediction>[];
 
@@ -105,11 +109,11 @@ class ApiService {
   }
 
   static Future<List<MatchPrediction>> _getBasketballLive() async {
-    // Basketball live is limited on free tier — return empty for now
+    // Basketball live is limited on free tier
     return [];
   }
 
-  // -------------------- HELPERS --------------------
+  // -------------------- LOW-LEVEL FETCH --------------------
 
   static Future<List<dynamic>> _getFootballFixtures(String date) async {
     final url = Uri.parse('$_footballBase/fixtures?date=$date');
@@ -160,6 +164,7 @@ class ApiService {
       winOrDraw = p['win_or_draw'];
       underOver = p['under_over']?.toString();
 
+      // ---- Percentages & confidence ----
       if (p['percent'] != null) {
         percentages = {
           'home': p['percent']['home']?.toString() ?? '0%',
@@ -172,7 +177,7 @@ class ApiService {
         final away = _pct(percentages['away']);
         final max = [home, draw, away].reduce((a, b) => a > b ? a : b);
 
-        // Confidence thresholds (tighter)
+        // Tighter confidence
         if (max >= 58) {
           confidence = 'High';
         } else if (max >= 48) {
@@ -181,7 +186,7 @@ class ApiService {
           confidence = 'Low';
         }
 
-        // Only emit strong directional tips
+        // Only strong directional tips
         if (home >= 55 && home >= away + 10) {
           tips.add('1');
         } else if (away >= 55 && away >= home + 10) {
@@ -197,7 +202,7 @@ class ApiService {
         }
       }
 
-      // Under/Over only when clearly stated
+      // Under / Over only when API gives a clear signal
       if (underOver != null && underOver.isNotEmpty) {
         final raw = underOver.toLowerCase();
         if (raw.contains('over') || raw.startsWith('+')) {
@@ -207,18 +212,21 @@ class ApiService {
         }
       }
 
-      // Fallback from winner comment only if still empty and strong
+      // Soft fallback from winner comment
       if (tips.isEmpty && p['winner'] != null) {
         final comment = (p['winner']['comment'] ?? '').toString().toLowerCase();
         final name = p['winner']['name'];
         if (comment.contains('win or draw')) {
-          if (name == teams['home']['name']) tips.add('1X');
-          else if (name == teams['away']['name']) tips.add('X2');
+          if (name == teams['home']['name']) {
+            tips.add('1X');
+          } else if (name == teams['away']['name']) {
+            tips.add('X2');
+          }
         }
       }
     }
 
-    // Final clean — no forced markets
+    // Final clean — never force GG / Over 1.5
     final cleaned = tips.toSet().toList();
     if (cleaned.isEmpty) {
       cleaned.add('No strong tip');
@@ -272,7 +280,8 @@ class ApiService {
   }
 
   static String _cleanOverUnder(String raw, {required bool isOver}) {
-    final number = RegExp(r'[0-9]+\.?[0-9]*').firstMatch(raw)?.group(0) ?? '2.5';
+    final number =
+        RegExp(r'[0-9]+\.?[0-9]*').firstMatch(raw)?.group(0) ?? '2.5';
     return isOver ? 'Over $number' : 'Under $number';
   }
 
