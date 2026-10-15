@@ -149,7 +149,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
               child: Text(e.key,
                   style: const TextStyle(fontWeight: FontWeight.w600)),
             ),
-            Text('$wonW / $lostL',
+            Text('$won-$lost',
                 style: const TextStyle(color: Colors.white54, fontSize: 13)),
             const SizedBox(width: 12),
             Text('${acc.toStringAsFixed(0)}%',
