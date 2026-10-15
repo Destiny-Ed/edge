@@ -2,20 +2,28 @@
 
 **Smart picks. Clear edge.**
 
-A clean Flutter app that shows today's and this week's sports predictions so you can quickly create booking tickets on SportyBet.
+A comprehensive Flutter sports prediction app focused on helping you find value and track your performance.
 
 ## Features
 
-- **Today** and **This Week** prediction tabs
-- Sport categories (Football primary, Basketball & others ready)
-- Clean dark UI optimized for quick ticket creation
-- Long-press any match to copy predictions for SportyBet
-- Uses [API-Sports](https://api-sports.io/) predictions endpoint
-- Pure Flutter (no backend required)
+- **Today & This Week** predictions
+- **Improved prediction logic** (no more forced 1X + Over 1.5 + GG on every match)
+- **Save picks** and mark them as **Won / Lost / Void**
+- **Analytics dashboard** — accuracy by market, by league, by confidence, streaks
+- **Filters** — League, Confidence level, Market type
+- Multi-sport support (Football fully supported, Basketball basic)
+- Long-press or button to copy tips for SportyBet
+- Clean dark UI
+
+## Prediction Quality Note
+
+Predictions now come primarily from API-Sports' own statistical model (`/predictions` endpoint).  
+We only surface tips when the data is reasonably strong.  
+Low-confidence or unclear matches are marked accordingly instead of forcing popular markets.
 
 ## Getting Started
 
-1. Get a free API key from [dashboard.api-football.com](https://dashboard.api-football.com)
+1. Get a free API key → [dashboard.api-football.com](https://dashboard.api-football.com)
 2. Open `lib/services/api_service.dart` and replace `YOUR_API_KEY_HERE`
 3. Run:
 
@@ -24,10 +32,10 @@ flutter pub get
 flutter run
 ```
 
-## Notes
+## Free Tier Warning
 
-- Free plan of API-Sports is limited to 100 requests/day. The app is written to stay within reasonable limits.
-- Football has full prediction support. Other sports are scaffolded for future expansion.
+API-Sports free plan = 100 requests/day.  
+The app limits the number of fixtures + prediction calls to stay within reasonable usage.
 
 ---
 
