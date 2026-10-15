@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
@@ -18,6 +19,7 @@ class NotificationService {
       final name = await FlutterTimezone.getLocalTimezone();
       tz.setLocalLocation(tz.getLocation(name));
     } catch (_) {
+      // Fallback for Nigeria / West Africa
       tz.setLocalLocation(tz.getLocation('Africa/Lagos'));
     }
 
@@ -32,7 +34,7 @@ class NotificationService {
       const InitializationSettings(android: android, iOS: ios),
     );
 
-    // Create channel on Android
+    // Android channel
     final androidPlugin = _plugin.resolvePlatformSpecificImplementation<
         AndroidFlutterLocalNotificationsPlugin>();
     await androidPlugin?.createNotificationChannel(
@@ -44,13 +46,39 @@ class NotificationService {
       ),
     );
 
-    // Request permission (Android 13+)
-    await androidPlugin?.requestNotificationsPermission();
+    // Request permissions
+    await requestPermissions();
+  }
+
+  /// Explicit permission request for both platforms
+  static Future<bool> requestPermissions() async {
+    if (Platform.isIOS) {
+      final iosPlugin = _plugin.resolvePlatformSpecificImplementation<
+          IOSFlutterLocalNotificationsPlugin>();
+      final granted = await iosPlugin?.requestPermissions(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+      return granted ?? false;
+    }
+
+    if (Platform.isAndroid) {
+      final androidPlugin = _plugin.resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>();
+      final granted = await androidPlugin?.requestNotificationsPermission();
+      return granted ?? false;
+    }
+
+    return false;
   }
 
   /// Schedule a daily notification at 07:00 local time
   static Future<void> scheduleDaily7Am() async {
     await cancelDaily();
+
+    // Ensure we still have permission
+    await requestPermissions();
 
     final now = tz.TZDateTime.now(tz.local);
     var scheduled = tz.TZDateTime(
@@ -62,14 +90,13 @@ class NotificationService {
       0,
     );
 
-    // If 7 AM already passed today, schedule for tomorrow
     if (scheduled.isBefore(now)) {
       scheduled = scheduled.add(const Duration(days: 1));
     }
 
     await _plugin.zonedSchedule(
       _notificationId,
-      'Edge — Today\'s Picks',
+      'Edge \u2014 Today\'s Picks',
       'Your daily predictions are ready. Open Edge to see today\'s tips.',
       scheduled,
       const NotificationDetails(
@@ -90,7 +117,7 @@ class NotificationService {
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
       uiLocalNotificationDateInterpretation:
           UILocalNotificationDateInterpretation.absoluteTime,
-      matchDateTimeComponents: DateTimeComponents.time, // repeats daily
+      matchDateTimeComponents: DateTimeComponents.time, // repeats daily at 7 AM
     );
   }
 
@@ -99,9 +126,10 @@ class NotificationService {
   }
 
   static Future<void> showTest() async {
+    await requestPermissions();
     await _plugin.show(
       9999,
-      'Edge — Test',
+      'Edge \u2014 Test',
       'Notifications are working.',
       const NotificationDetails(
         android: AndroidNotificationDetails(
@@ -110,7 +138,11 @@ class NotificationService {
           importance: Importance.high,
           priority: Priority.high,
         ),
-        iOS: DarwinNotificationDetails(),
+        iOS: DarwinNotificationDetails(
+          presentAlert: true,
+          presentBadge: true,
+          presentSound: true,
+        ),
       ),
     );
   }

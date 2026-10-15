@@ -9,6 +9,8 @@ class SettingsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<AppSettings>();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final muted = isDark ? Colors.white54 : Colors.black54;
 
     return SafeArea(
       child: ListView(
@@ -19,7 +21,7 @@ class SettingsScreen extends StatelessWidget {
             style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 24),
-          _sectionTitle('Appearance'),
+          _sectionTitle('Appearance', muted),
           SwitchListTile(
             title: const Text('Dark Mode'),
             subtitle: const Text('Switch between dark and light theme'),
@@ -28,7 +30,7 @@ class SettingsScreen extends StatelessWidget {
             onChanged: (_) => settings.toggleTheme(),
           ),
           const Divider(height: 32),
-          _sectionTitle('Notifications'),
+          _sectionTitle('Notifications', muted),
           SwitchListTile(
             title: const Text('Daily Predictions'),
             subtitle: const Text(
@@ -36,7 +38,22 @@ class SettingsScreen extends StatelessWidget {
             ),
             value: settings.dailyNotifications,
             activeColor: const Color(0xFF00C853),
-            onChanged: (v) => settings.setDailyNotifications(v),
+            onChanged: (v) async {
+              if (v) {
+                // Ask for permission first on iOS/Android
+                final granted = await NotificationService.requestPermissions();
+                if (!granted && context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Notification permission denied. Enable it in system settings.',
+                      ),
+                    ),
+                  );
+                }
+              }
+              await settings.setDailyNotifications(v);
+            },
           ),
           ListTile(
             title: const Text('Test notification'),
@@ -52,7 +69,7 @@ class SettingsScreen extends StatelessWidget {
             },
           ),
           const Divider(height: 32),
-          _sectionTitle('About'),
+          _sectionTitle('About', muted),
           const ListTile(
             title: Text('Edge'),
             subtitle: Text('Smart picks. Clear edge.\nVersion 1.2.1'),
@@ -66,15 +83,15 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
-  Widget _sectionTitle(String text) {
+  Widget _sectionTitle(String text, Color color) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Text(
         text,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 13,
           fontWeight: FontWeight.w600,
-          color: Colors.white54,
+          color: color,
           letterSpacing: 0.5,
         ),
       ),
