@@ -4,7 +4,7 @@ import '../models/match_prediction.dart';
 
 class ApiService {
   // ⚠️ Replace with your real API key from https://dashboard.api-football.com
-  static const String _apiKey = 'YOUR_API_KEY_HERE';
+  static const String _apiKey = 'f1fc3fa8501ef766e46d187815d2a57d';
 
   static const String _footballBase = 'https://v3.football.api-sports.io';
 
