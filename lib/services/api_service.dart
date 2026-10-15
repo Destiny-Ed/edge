@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:uuid/uuid.dart';
 import '../models/match_prediction.dart';
 
 class ApiService {
@@ -8,176 +7,163 @@ class ApiService {
   static const String _apiKey = 'f1fc3fa8501ef766e46d187815d2a57d';
 
   static const String _footballBase = 'https://v3.football.api-sports.io';
-  static const String _basketballBase = 'https://v1.basketball.api-sports.io';
 
   static Map<String, String> get _headers => {
         'x-apisports-key': _apiKey,
       };
 
-  static final _uuid = Uuid();
-
-  // -------------------- FOOTBALL --------------------
-
+  /// Get fixtures for a specific date (Football)
   static Future<List<dynamic>> getFootballFixturesByDate(String date) async {
     final url = Uri.parse('$_footballBase/fixtures?date=$date');
     final res = await http.get(url, headers: _headers);
+
     if (res.statusCode != 200) {
-      throw Exception('Football fixtures error: ${res.statusCode}');
+      throw Exception('Failed to load fixtures: ${res.statusCode}');
     }
+
     final data = jsonDecode(res.body);
     return data['response'] ?? [];
   }
 
+  /// Get prediction for a single fixture
   static Future<Map<String, dynamic>?> getFootballPrediction(int fixtureId) async {
     final url = Uri.parse('$_footballBase/predictions?fixture=$fixtureId');
     final res = await http.get(url, headers: _headers);
+
     if (res.statusCode != 200) return null;
+
     final data = jsonDecode(res.body);
     final list = data['response'] as List?;
     if (list == null || list.isEmpty) return null;
     return list.first;
   }
 
-  // -------------------- BASKETBALL (basic) --------------------
-
-  static Future<List<dynamic>> getBasketballGamesByDate(String date) async {
-    final url = Uri.parse('$_basketballBase/games?date=$date');
-    final res = await http.get(url, headers: _headers);
-    if (res.statusCode != 200) return [];
-    final data = jsonDecode(res.body);
-    return data['response'] ?? [];
-  }
-
-  // -------------------- MAIN --------------------
-
+  /// Main method: Get today's + this week's predictions
   static Future<Map<String, List<MatchPrediction>>> getPredictions({
-    required String sport,
+    required String sport, // 'football' or 'basketball'
   }) async {
-    if (sport == 'football') {
-      return _getFootballPredictions();
-    } else if (sport == 'basketball') {
-      return _getBasketballPredictions();
+    if (sport != 'football') {
+      // Football is fully supported. Other sports can be expanded later.
+      return {'today': [], 'week': []};
     }
-    return {'today': [], 'week': []};
-  }
 
-  static Future<Map<String, List<MatchPrediction>>> _getFootballPredictions() async {
     final now = DateTime.now().toUtc();
     final weekFixtures = <dynamic>[];
 
-    // Fetch 5 days only to protect free tier
-    for (int i = 0; i < 5; i++) {
+    // Fetch today + next 6 days (careful with free tier limits)
+    for (int i = 0; i < 7; i++) {
       final date = now.add(Duration(days: i));
+      final dateStr = _formatDate(date);
       try {
-        final fixtures = await getFootballFixturesByDate(_formatDate(date));
+        final fixtures = await getFootballFixturesByDate(dateStr);
         weekFixtures.addAll(fixtures);
       } catch (_) {}
-      await Future.delayed(const Duration(milliseconds: 350));
+      await Future.delayed(const Duration(milliseconds: 300));
     }
 
+    final todayPredictions = <MatchPrediction>[];
+    final weekPredictions = <MatchPrediction>[];
+
+    // Only process upcoming matches (NS = Not Started)
     final upcoming = weekFixtures.where((f) {
       final status = f['fixture']['status']['short'];
       return status == 'NS' || status == 'TBD';
     }).toList();
 
-    // Limit calls
-    final limited = upcoming.take(20).toList();
-
-    final todayPredictions = <MatchPrediction>[];
-    final weekPredictions = <MatchPrediction>[];
+    // Limit to top ~25 matches to stay within free plan
+    final limited = upcoming.take(25).toList();
 
     for (final fixture in limited) {
       final fixtureId = fixture['fixture']['id'] as int;
       final predData = await getFootballPrediction(fixtureId);
-      final match = _mapFootballPrediction(fixture, predData);
 
-      final kickOff = match.kickOff;
+      final match = _mapToMatchPrediction(fixture, predData, sport);
+
+      final kickOff = DateTime.parse(fixture['fixture']['date']).toLocal();
       final isToday = kickOff.year == now.year &&
           kickOff.month == now.month &&
           kickOff.day == now.day;
 
-      if (isToday) todayPredictions.add(match);
+      if (isToday) {
+        todayPredictions.add(match);
+      }
       weekPredictions.add(match);
 
-      await Future.delayed(const Duration(milliseconds: 280));
+      await Future.delayed(const Duration(milliseconds: 250));
     }
 
+    // Sort by kick-off time
     todayPredictions.sort((a, b) => a.kickOff.compareTo(b.kickOff));
     weekPredictions.sort((a, b) => a.kickOff.compareTo(b.kickOff));
 
-    return {'today': todayPredictions, 'week': weekPredictions};
+    return {
+      'today': todayPredictions,
+      'week': weekPredictions,
+    };
   }
 
-  static Future<Map<String, List<MatchPrediction>>> _getBasketballPredictions() async {
-    final now = DateTime.now().toUtc();
-    final games = <dynamic>[];
-
-    for (int i = 0; i < 3; i++) {
-      final date = now.add(Duration(days: i));
-      try {
-        final list = await getBasketballGamesByDate(_formatDate(date));
-        games.addAll(list);
-      } catch (_) {}
-      await Future.delayed(const Duration(milliseconds: 300));
-    }
-
-    final upcoming = games.where((g) {
-      final status = g['status']?['short'] ?? g['status']?['long'] ?? '';
-      return status.toString().toUpperCase().contains('NS') ||
-          status.toString().toUpperCase().contains('NOT') ||
-          status.toString().toUpperCase().contains('SCHEDULED');
-    }).take(15).toList();
-
-    final today = <MatchPrediction>[];
-    final week = <MatchPrediction>[];
-
-    for (final g in upcoming) {
-      final match = _mapBasketballGame(g);
-      final isToday = match.kickOff.year == now.year &&
-          match.kickOff.month == now.month &&
-          match.kickOff.day == now.day;
-      if (isToday) today.add(match);
-      week.add(match);
-    }
-
-    return {'today': today, 'week': week};
-  }
-
-  // -------------------- MAPPERS --------------------
-
-  static MatchPrediction _mapFootballPrediction(
-      dynamic fixture, Map<String, dynamic>? predData) {
+  static MatchPrediction _mapToMatchPrediction(
+      dynamic fixture, Map<String, dynamic>? predData, String sport) {
     final teams = fixture['teams'];
     final league = fixture['league'];
     final fixtureInfo = fixture['fixture'];
 
     final List<String> tips = [];
     String? advice;
-    String confidence = 'Unknown';
+    String? confidence;
     Map<String, String>? percentages;
-    String? underOver;
-    bool? winOrDraw;
 
     if (predData != null) {
-      final p = predData['predictions'];
-      advice = p['advice'];
-      winOrDraw = p['win_or_draw'];
-      underOver = p['under_over']?.toString();
+      final predictions = predData['predictions'];
+      advice = predictions['advice'];
 
-      // Percentages
-      if (p['percent'] != null) {
+      // Winner / Double chance
+      if (predictions['winner'] != null) {
+        final winnerName = predictions['winner']['name'];
+        final comment = predictions['winner']['comment'] ?? '';
+        if (comment.toLowerCase().contains('win or draw')) {
+          if (winnerName == teams['home']['name']) {
+            tips.add('1X');
+          } else {
+            tips.add('X2');
+          }
+        } else {
+          if (winnerName == teams['home']['name']) {
+            tips.add('1');
+          } else if (winnerName == teams['away']['name']) {
+            tips.add('2');
+          }
+        }
+      }
+
+      // Under / Over
+      final underOver = predictions['under_over'];
+      if (underOver != null) {
+        if (underOver.toString().startsWith('+') ||
+            underOver.toString().toLowerCase().contains('over')) {
+          tips.add(underOver.toString().replaceAll('+', 'Over '));
+        } else if (underOver.toString().startsWith('-')) {
+          tips.add('Under ${underOver.toString().substring(1)}');
+        } else {
+          tips.add(underOver.toString());
+        }
+      }
+
+      // Percentages + simple confidence
+      if (predictions['percent'] != null) {
         percentages = {
-          'home': p['percent']['home']?.toString() ?? '',
-          'draw': p['percent']['draw']?.toString() ?? '',
-          'away': p['percent']['away']?.toString() ?? '',
+          'home': predictions['percent']['home'] ?? '',
+          'draw': predictions['percent']['draw'] ?? '',
+          'away': predictions['percent']['away'] ?? '',
         };
 
-        final homePct = _parsePct(percentages['home']);
-        final drawPct = _parsePct(percentages['draw']);
-        final awayPct = _parsePct(percentages['away']);
-
-        final maxPct = [homePct, drawPct, awayPct].reduce((a, b) => a > b ? a : b);
-
+        final homePct = int.tryParse(
+                (predictions['percent']['home'] as String).replaceAll('%', '')) ??
+            0;
+        final awayPct = int.tryParse(
+                (predictions['percent']['away'] as String).replaceAll('%', '')) ??
+            0;
+        final maxPct = homePct > awayPct ? homePct : awayPct;
         if (maxPct >= 55) {
           confidence = 'High';
         } else if (maxPct >= 45) {
@@ -185,62 +171,21 @@ class ApiService {
         } else {
           confidence = 'Low';
         }
-
-        // Only add strong 1X2 style tips
-        if (homePct >= 50 && homePct > awayPct + 8) {
-          tips.add('1');
-        } else if (awayPct >= 50 && awayPct > homePct + 8) {
-          tips.add('2');
-        } else if (winOrDraw == true) {
-          if (homePct >= drawPct && homePct >= awayPct) {
-            tips.add('1X');
-          } else if (awayPct >= drawPct) {
-            tips.add('X2');
-          }
-        } else if (drawPct >= 38) {
-          tips.add('X');
-        }
-      }
-
-      // Under / Over — only if clear
-      if (underOver != null && underOver.isNotEmpty) {
-        final uo = underOver.toLowerCase();
-        if (uo.contains('over') || uo.startsWith('+')) {
-          final clean = underOver.replaceAll('+', 'Over ').replaceAll('over', 'Over');
-          tips.add(clean);
-        } else if (uo.contains('under') || uo.startsWith('-')) {
-          final clean = underOver.replaceAll('-', 'Under ').replaceAll('under', 'Under');
-          tips.add(clean);
-        }
-      }
-
-      // Winner comment fallback
-      if (tips.isEmpty && p['winner'] != null) {
-        final comment = (p['winner']['comment'] ?? '').toString().toLowerCase();
-        final name = p['winner']['name'];
-        if (comment.contains('win or draw')) {
-          if (name == teams['home']['name']) tips.add('1X');
-          else tips.add('X2');
-        } else {
-          if (name == teams['home']['name']) tips.add('1');
-          else if (name == teams['away']['name']) tips.add('2');
-        }
       }
     }
 
-    // Clean: only keep useful, non-duplicate tips
-    final cleaned = tips.toSet().toList();
+    // Fallback simple tips if API prediction is missing
+    if (tips.isEmpty) {
+      tips.addAll(['1X', 'Over 1.5']);
+    }
 
-    // If still empty, give a very soft fallback (better than nothing)
-    if (cleaned.isEmpty) {
-      cleaned.add('Review');
-      confidence = 'Low';
+    // Add GG as a common useful market
+    if (!tips.contains('GG') && !tips.contains('BTTS')) {
+      tips.add('GG');
     }
 
     return MatchPrediction(
-      id: _uuid.v4(),
       fixtureId: fixtureInfo['id'],
-      sport: 'football',
       homeTeam: teams['home']['name'],
       awayTeam: teams['away']['name'],
       homeLogo: teams['home']['logo'],
@@ -249,46 +194,11 @@ class ApiService {
       country: league['country'] ?? '',
       kickOff: DateTime.parse(fixtureInfo['date']).toLocal(),
       status: fixtureInfo['status']['short'],
-      predictions: cleaned,
+      predictions: tips.toSet().toList(),
       advice: advice,
-      confidence: confidence,
-      percentages: percentages,
-      underOver: underOver,
-      winOrDraw: winOrDraw,
+      confidence: confidence ?? 'unknown',
+      percentages: percentages, id: DateTime.now().microsecondsSinceEpoch.toString(), sport: sport,
     );
-  }
-
-  static MatchPrediction _mapBasketballGame(dynamic g) {
-    final teams = g['teams'] ?? {};
-    final home = teams['home'] ?? {};
-    final away = teams['away'] ?? {};
-    final league = g['league'] ?? {};
-    final date = g['date'] ?? g['datetime'] ?? DateTime.now().toIso8601String();
-
-    // Basketball has weaker free prediction data → keep simple
-    final tips = <String>['Home or Away', 'Over 200.5']; // placeholder style
-
-    return MatchPrediction(
-      id: _uuid.v4(),
-      fixtureId: g['id'] ?? 0,
-      sport: 'basketball',
-      homeTeam: home['name'] ?? 'Home',
-      awayTeam: away['name'] ?? 'Away',
-      homeLogo: home['logo'],
-      awayLogo: away['logo'],
-      league: league['name'] ?? 'Basketball',
-      country: league['country']?['name'] ?? '',
-      kickOff: DateTime.tryParse(date.toString())?.toLocal() ?? DateTime.now(),
-      status: g['status']?['short'] ?? 'NS',
-      predictions: tips,
-      confidence: 'Low',
-      advice: 'Basketball predictions are limited on free tier',
-    );
-  }
-
-  static int _parsePct(String? value) {
-    if (value == null) return 0;
-    return int.tryParse(value.replaceAll('%', '').trim()) ?? 0;
   }
 
   static String _formatDate(DateTime date) {
