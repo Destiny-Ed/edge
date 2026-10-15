@@ -140,7 +140,7 @@ class ApiService {
     return data['response'] ?? [];
   }
 
-  // -------------------- PREDICTION MAPPING --------------------
+  // -------------------- PREDICTION MAPPING (min 3 tips) --------------------
 
   static MatchPrediction _mapFootball(
       dynamic fixture, Map<String, dynamic>? predData) {
@@ -150,10 +150,12 @@ class ApiService {
 
     final tips = <String>[];
     String? advice;
-    String confidence = 'Low';
+    String confidence = 'Medium';
     Map<String, String>? percentages;
     String? underOver;
     bool? winOrDraw;
+
+    int home = 0, draw = 0, away = 0;
 
     if (predData != null) {
       final p = predData['predictions'];
@@ -167,12 +169,11 @@ class ApiService {
           'draw': p['percent']['draw']?.toString() ?? '0%',
           'away': p['percent']['away']?.toString() ?? '0%',
         };
+        home = _pct(percentages['home']);
+        draw = _pct(percentages['draw']);
+        away = _pct(percentages['away']);
 
-        final home = _pct(percentages['home']);
-        final draw = _pct(percentages['draw']);
-        final away = _pct(percentages['away']);
         final max = [home, draw, away].reduce((a, b) => a > b ? a : b);
-
         if (max >= 58) {
           confidence = 'High';
         } else if (max >= 48) {
@@ -180,81 +181,54 @@ class ApiService {
         } else {
           confidence = 'Low';
         }
-
-        // Strong directional tips
-        if (home >= 55 && home >= away + 10) {
-          tips.add('1');
-        } else if (away >= 55 && away >= home + 10) {
-          tips.add('2');
-        } else if (winOrDraw == true) {
-          if (home >= away && home >= 42) {
-            tips.add('1X');
-          } else if (away > home && away >= 42) {
-            tips.add('X2');
-          }
-        } else if (draw >= 40 && draw >= home && draw >= away) {
-          tips.add('X');
-        }
-
-        // Soft likely outcome from highest % when no strong tip yet
-        if (tips.isEmpty) {
-          if (home >= draw && home >= away) {
-            tips.add(home >= 45 ? '1' : '1X');
-          } else if (away >= draw && away >= home) {
-            tips.add(away >= 45 ? '2' : 'X2');
-          } else {
-            tips.add('X');
-          }
-        }
       }
 
-      // Under / Over from API
-      if (underOver != null && underOver.isNotEmpty) {
-        final raw = underOver.toLowerCase();
-        if (raw.contains('over') || raw.startsWith('+')) {
-          tips.add(_cleanOverUnder(underOver, isOver: true));
-        } else if (raw.contains('under') || raw.startsWith('-')) {
-          tips.add(_cleanOverUnder(underOver, isOver: false));
-        }
-      }
+      // ---------- 1) MATCH RESULT (never weak pure X on strong favorite) ----------
+      final resultTip = _pickResultTip(
+        home: home,
+        draw: draw,
+        away: away,
+        winOrDraw: winOrDraw,
+        winner: p['winner'],
+        homeName: teams['home']['name']?.toString() ?? '',
+        awayName: teams['away']['name']?.toString() ?? '',
+        advice: advice,
+      );
+      if (resultTip != null) tips.add(resultTip);
 
-      // Winner comment fallback
-      if (tips.isEmpty && p['winner'] != null) {
-        final comment = (p['winner']['comment'] ?? '').toString().toLowerCase();
-        final name = p['winner']['name'];
-        if (comment.contains('win or draw')) {
-          if (name == teams['home']['name']) {
-            tips.add('1X');
-          } else if (name == teams['away']['name']) {
-            tips.add('X2');
-          }
-        } else {
-          if (name == teams['home']['name']) {
-            tips.add('1');
-          } else if (name == teams['away']['name']) {
-            tips.add('2');
-          }
-        }
-      }
+      // ---------- 2) GOALS (Over / Under) ----------
+      final goalsTip = _pickGoalsTip(underOver, home, away, draw);
+      if (goalsTip != null) tips.add(goalsTip);
 
-      // Last resort: use advice keywords
-      if (tips.isEmpty && advice != null && advice.isNotEmpty) {
-        final a = advice.toLowerCase();
-        if (a.contains('home') || a.contains(teams['home']['name'].toString().toLowerCase())) {
-          tips.add(a.contains('draw') ? '1X' : '1');
-        } else if (a.contains('away') || a.contains(teams['away']['name'].toString().toLowerCase())) {
-          tips.add(a.contains('draw') ? 'X2' : '2');
-        } else if (a.contains('draw')) {
-          tips.add('X');
-        }
-      }
+      // ---------- 3) BTTS / GG ----------
+      final bttsTip = _pickBttsTip(home, away, draw, underOver);
+      if (bttsTip != null) tips.add(bttsTip);
+
+      // ---------- 4) Extra safety markets to always reach 3+ ----------
+      _fillToAtLeastThree(
+        tips: tips,
+        home: home,
+        away: away,
+        draw: draw,
+        underOver: underOver,
+        resultTip: resultTip,
+      );
+    } else {
+      // No API prediction — still give 3 useful markets
+      tips.addAll(['1X', 'Over 1.5', 'GG']);
+      confidence = 'Low';
     }
 
+    // Guarantee minimum 3 unique tips
     final cleaned = tips.toSet().toList();
-    // Never leave empty — always show the most likely API-derived tip
-    if (cleaned.isEmpty) {
-      cleaned.add('1X'); // safest neutral default when API is silent
-      confidence = 'Low';
+    while (cleaned.length < 3) {
+      for (final fallback in ['Over 1.5', 'GG', '1X', 'Over 2.5', 'Home or Draw']) {
+        if (!cleaned.contains(fallback)) {
+          cleaned.add(fallback);
+          if (cleaned.length >= 3) break;
+        }
+      }
+      break;
     }
 
     return MatchPrediction(
@@ -269,13 +243,155 @@ class ApiService {
       country: league['country'] ?? '',
       kickOff: DateTime.parse(fixtureInfo['date']).toLocal(),
       status: fixtureInfo['status']['short'] ?? 'NS',
-      predictions: cleaned,
+      predictions: cleaned.take(5).toList(), // cap at 5
       advice: advice,
       confidence: confidence,
       percentages: percentages,
       underOver: underOver,
       winOrDraw: winOrDraw,
     );
+  }
+
+  /// Result market — avoid pure X when one side is clearly stronger
+  static String? _pickResultTip({
+    required int home,
+    required int draw,
+    required int away,
+    required bool? winOrDraw,
+    required dynamic winner,
+    required String homeName,
+    required String awayName,
+    required String? advice,
+  }) {
+    // Strong home favorite → 1 or 1X (never pure X)
+    if (home >= 55 && home >= away + 12) return '1';
+    if (home >= 48 && home >= away + 8) return '1X';
+
+    // Strong away favorite → 2 or X2
+    if (away >= 55 && away >= home + 12) return '2';
+    if (away >= 48 && away >= home + 8) return 'X2';
+
+    // Genuine draw only if draw is clearly the top % and close game
+    if (draw >= 38 && draw >= home && draw >= away && (home - away).abs() <= 8) {
+      return 'X';
+    }
+
+    // win_or_draw flag from API
+    if (winOrDraw == true) {
+      if (home >= away) return '1X';
+      return 'X2';
+    }
+
+    // Winner object
+    if (winner != null) {
+      final name = winner['name']?.toString() ?? '';
+      final comment = (winner['comment'] ?? '').toString().toLowerCase();
+      if (comment.contains('win or draw')) {
+        if (name == homeName) return '1X';
+        if (name == awayName) return 'X2';
+      } else {
+        if (name == homeName) return home >= 50 ? '1' : '1X';
+        if (name == awayName) return away >= 50 ? '2' : 'X2';
+      }
+    }
+
+    // Advice text
+    if (advice != null && advice.isNotEmpty) {
+      final a = advice.toLowerCase();
+      if (a.contains(homeName.toLowerCase()) || a.contains('home')) {
+        return a.contains('draw') ? '1X' : '1';
+      }
+      if (a.contains(awayName.toLowerCase()) || a.contains('away')) {
+        return a.contains('draw') ? 'X2' : '2';
+      }
+      if (a.contains('draw')) return '1X'; // prefer double chance over pure X
+    }
+
+    // Default: lean to the higher side with double chance (safer)
+    if (home >= away) return '1X';
+    return 'X2';
+  }
+
+  static String? _pickGoalsTip(
+      String? underOver, int home, int away, int draw) {
+    if (underOver != null && underOver.isNotEmpty) {
+      final raw = underOver.toLowerCase();
+      if (raw.contains('over') || raw.startsWith('+')) {
+        return _cleanOverUnder(underOver, isOver: true);
+      }
+      if (raw.contains('under') || raw.startsWith('-')) {
+        return _cleanOverUnder(underOver, isOver: false);
+      }
+    }
+
+    // Heuristic from probabilities: open games lean Over, tight games Under
+    final totalAttackSignal = home + away;
+    if (totalAttackSignal >= 100 || (home >= 50 && away >= 30)) {
+      return 'Over 1.5';
+    }
+    if (draw >= 40 && home < 40 && away < 40) {
+      return 'Under 3.5';
+    }
+    return 'Over 1.5';
+  }
+
+  static String? _pickBttsTip(
+      int home, int away, int draw, String? underOver) {
+    // Both sides with decent chance → GG
+    if (home >= 30 && away >= 30) return 'GG';
+
+    // Very one-sided → NG more likely
+    if ((home >= 60 && away <= 20) || (away >= 60 && home <= 20)) {
+      return 'NG';
+    }
+
+    // Over markets often correlate with GG
+    if (underOver != null &&
+        (underOver.toLowerCase().contains('over') ||
+            underOver.startsWith('+'))) {
+      return 'GG';
+    }
+
+    return 'GG';
+  }
+
+  static void _fillToAtLeastThree({
+    required List<String> tips,
+    required int home,
+    required int away,
+    required int draw,
+    required String? underOver,
+    required String? resultTip,
+  }) {
+    // Team to score
+    if (!tips.any((t) => t == 'GG' || t == 'NG')) {
+      tips.add(home >= 30 && away >= 30 ? 'GG' : 'Home score');
+    }
+
+    if (tips.length < 3) {
+      if (!tips.any((t) => t.toLowerCase().contains('over') ||
+          t.toLowerCase().contains('under'))) {
+        tips.add('Over 1.5');
+      }
+    }
+
+    if (tips.length < 3) {
+      // Double chance opposite of pure result if needed
+      if (resultTip == '1') {
+        tips.add('1X');
+      } else if (resultTip == '2') {
+        tips.add('X2');
+      } else if (resultTip == 'X') {
+        // User complaint: pure X is often weak — add safer cover
+        tips.add(home >= away ? '1X' : 'X2');
+      } else {
+        tips.add(home >= away ? '1X' : 'X2');
+      }
+    }
+
+    if (tips.length < 3) {
+      tips.add('Over 2.5');
+    }
   }
 
   static MatchPrediction _mapBasketball(dynamic g) {
@@ -297,7 +413,7 @@ class ApiService {
       country: '',
       kickOff: DateTime.tryParse(date.toString())?.toLocal() ?? DateTime.now(),
       status: g['status']?['short'] ?? 'NS',
-      predictions: const ['Home ML'],
+      predictions: const ['Home ML', 'Over 210.5', 'Home -3.5'],
       confidence: 'Low',
       advice: 'Basketball tips are limited on free plan',
     );
